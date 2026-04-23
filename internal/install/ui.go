@@ -21,6 +21,11 @@ type doctorModel struct {
 	done   bool
 }
 
+// NewDoctorModel creates a doctorModel for testing without running the full TUI.
+func NewDoctorModel(result Result) tea.Model {
+	return doctorModel{result: result}
+}
+
 func (m doctorModel) Init() tea.Cmd { return nil }
 
 func (m doctorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

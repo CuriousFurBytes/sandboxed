@@ -23,22 +23,37 @@ var (
 	itemNormal   = lipgloss.NewStyle().Foreground(lipgloss.Color("#A0A0A0"))
 )
 
-type sbxItem struct {
+// SbxItem wraps a SandboxInfo for display in the list.
+type SbxItem struct {
 	sandbox.SandboxInfo
 }
 
-func (i sbxItem) FilterValue() string { return i.Name + " " + i.HostPath }
-func (i sbxItem) Title() string       { return i.Name }
-func (i sbxItem) Description() string { return i.HostPath }
+// NewSbxItem creates an SbxItem from a SandboxInfo.
+func NewSbxItem(info sandbox.SandboxInfo) SbxItem {
+	return SbxItem{info}
+}
 
-type sbxDelegate struct{}
+// FilterValue implements list.Item. Includes name and path for fuzzy filtering.
+func (i SbxItem) FilterValue() string { return i.Name + " " + i.HostPath }
 
-func (d sbxDelegate) Height() int                             { return 2 }
-func (d sbxDelegate) Spacing() int                            { return 1 }
-func (d sbxDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+// Title implements list.DefaultItem.
+func (i SbxItem) Title() string { return i.Name }
 
-func (d sbxDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	item, ok := listItem.(sbxItem)
+// Description implements list.DefaultItem.
+func (i SbxItem) Description() string { return i.HostPath }
+
+// SbxDelegate renders each SbxItem in the list.
+type SbxDelegate struct{}
+
+// NewSbxDelegate creates a SbxDelegate.
+func NewSbxDelegate() SbxDelegate { return SbxDelegate{} }
+
+func (d SbxDelegate) Height() int                             { return 2 }
+func (d SbxDelegate) Spacing() int                            { return 1 }
+func (d SbxDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+
+func (d SbxDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(SbxItem)
 	if !ok {
 		return
 	}
@@ -69,6 +84,26 @@ type listModel struct {
 	done bool
 }
 
+// NewListModel constructs a listModel for the given sandbox infos.
+// Returns tea.Model so external test code can call View() without knowing the concrete type.
+func NewListModel(infos []sandbox.SandboxInfo) tea.Model {
+	items := make([]list.Item, len(infos))
+	for i, info := range infos {
+		items[i] = SbxItem{info}
+	}
+	l := list.New(items, SbxDelegate{}, 80, 24)
+	l.Title = "sbx — sandboxes"
+	l.Styles.Title = titleStyle
+	l.SetShowStatusBar(true)
+	l.SetFilteringEnabled(true)
+	return listModel{list: l}
+}
+
+// NewDoneListModel returns a listModel already in the quit state (View returns "").
+func NewDoneListModel() tea.Model {
+	return listModel{done: true}
+}
+
 func (m listModel) Init() tea.Cmd { return nil }
 
 func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -97,20 +132,7 @@ func (m listModel) View() string {
 }
 
 // RunList displays an interactive filterable list of sandboxes.
-// Returns nil when the user quits normally.
 func RunList(infos []sandbox.SandboxInfo) error {
-	items := make([]list.Item, len(infos))
-	for i, info := range infos {
-		items[i] = sbxItem{info}
-	}
-
-	l := list.New(items, sbxDelegate{}, 80, 24)
-	l.Title = "sbx — sandboxes"
-	l.Styles.Title = titleStyle
-	l.SetShowStatusBar(true)
-	l.SetFilteringEnabled(true)
-
-	m := listModel{list: l}
-	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	_, err := tea.NewProgram(NewListModel(infos), tea.WithAltScreen()).Run()
 	return err
 }

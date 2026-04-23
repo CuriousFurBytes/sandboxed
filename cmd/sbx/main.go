@@ -66,9 +66,19 @@ func main() {
 		okf("sandbox ready (host: %s)", mustPWD())
 
 	case "sh", "shell":
+		abs := mustPWD()
+		name := sandbox.ID(abs)
 		mgr := sandbox.NewManager(cfg)
-		runner := sandbox.NewRunner(mgr)
-		if err := runner.Shell(mustPWD()); err != nil {
+		if err := mgr.EnsureRunning(name); err != nil {
+			die("%v", err)
+		}
+		podmanArgs := []string{
+			"podman", "exec", "-it",
+			"-e", "TERM=" + envOr("TERM", "xterm-256color"),
+			"-e", "COLORTERM=" + os.Getenv("COLORTERM"),
+			name, "/bin/bash", "-l",
+		}
+		if err := tui.LaunchModal("sbx — shell", podmanArgs); err != nil {
 			die("%v", err)
 		}
 

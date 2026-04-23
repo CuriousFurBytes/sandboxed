@@ -14,32 +14,44 @@ var modalHeaderStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#25A065")).
 	Padding(0, 2)
 
-// LaunchModal runs args in a modal sub-terminal.
-//
-// When tuios is available and a tuios session is active, the command is opened
-// as a new floating pane above the current terminal. Otherwise it runs inline
-// with a styled header banner.
-func LaunchModal(title string, args []string) error {
+// ModalLauncher runs commands in a tuios floating pane or inline.
+type ModalLauncher struct {
+	lookPath func(string) (string, error)
+}
+
+// NewModalLauncher creates a ModalLauncher using the real exec.LookPath.
+func NewModalLauncher() *ModalLauncher {
+	return &ModalLauncher{lookPath: exec.LookPath}
+}
+
+// NewModalLauncherWithDeps creates a ModalLauncher with an injectable path resolver (for tests).
+func NewModalLauncherWithDeps(lookPath func(string) (string, error)) *ModalLauncher {
+	return &ModalLauncher{lookPath: lookPath}
+}
+
+// Launch runs args in a tuios modal when inside a tuios session, otherwise inline.
+func (l *ModalLauncher) Launch(title string, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no command to run")
 	}
-	if isTuiosSession() {
-		return launchWithTuios(title, args)
+	if l.isTuiosSession() {
+		return l.launchWithTuios(title, args)
 	}
 	return launchInline(title, args)
 }
 
-// isTuiosSession returns true when running inside an active tuios session.
-func isTuiosSession() bool {
-	if _, err := exec.LookPath("tuios"); err != nil {
+// isTuiosSession returns true when running inside an active tuios session
+// and the tuios binary is available.
+func (l *ModalLauncher) isTuiosSession() bool {
+	if os.Getenv("TUIOS_SESSION") == "" && os.Getenv("TUIOS_PANE_ID") == "" {
 		return false
 	}
-	// tuios sets TUIOS_SESSION or similar; fall back to checking the env var
-	return os.Getenv("TUIOS_SESSION") != "" || os.Getenv("TUIOS_PANE_ID") != ""
+	_, err := l.lookPath("tuios")
+	return err == nil
 }
 
 // launchWithTuios spawns a floating pane in the current tuios session.
-func launchWithTuios(title string, args []string) error {
+func (l *ModalLauncher) launchWithTuios(title string, args []string) error {
 	tuiosArgs := []string{"spawn", "--title", title, "--float", "--"}
 	tuiosArgs = append(tuiosArgs, args...)
 	cmd := exec.Command("tuios", tuiosArgs...)
@@ -49,7 +61,7 @@ func launchWithTuios(title string, args []string) error {
 	return cmd.Run()
 }
 
-// launchInline runs args in the current terminal with a styled header.
+// launchInline runs args in the current terminal with a styled header banner.
 func launchInline(title string, args []string) error {
 	header := modalHeaderStyle.Render(fmt.Sprintf("  %s  ", title))
 	fmt.Fprintln(os.Stderr, header)
@@ -59,4 +71,9 @@ func launchInline(title string, args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// LaunchModal is a package-level convenience using the default launcher.
+func LaunchModal(title string, args []string) error {
+	return NewModalLauncher().Launch(title, args)
 }

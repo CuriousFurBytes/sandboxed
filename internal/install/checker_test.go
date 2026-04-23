@@ -88,6 +88,33 @@ func TestCheck_MissingSubUID(t *testing.T) {
 	}
 }
 
+func TestCheck_SubuidFileUnreadable_ReportsMissing(t *testing.T) {
+	c := install.NewWithDeps(
+		func(name string) (string, error) { return "/usr/bin/" + name, nil },
+		func(path string) ([]byte, error) {
+			return nil, errors.New("permission denied")
+		},
+		func() (string, error) { return "testuser", nil },
+	)
+	result := c.Check()
+	// Can't read subuid/subgid → both are treated as missing
+	if result.OK() {
+		t.Error("expected not OK when subuid/subgid files are unreadable")
+	}
+}
+
+func TestCheck_UsernameError_ReportsMissing(t *testing.T) {
+	c := install.NewWithDeps(
+		func(name string) (string, error) { return "/usr/bin/" + name, nil },
+		func(path string) ([]byte, error) { return []byte("testuser:100000:65536\n"), nil },
+		func() (string, error) { return "", errors.New("cannot get user") },
+	)
+	result := c.Check()
+	if result.OK() {
+		t.Error("expected not OK when username cannot be determined")
+	}
+}
+
 func TestCheck_MissingRsyncIsWarning(t *testing.T) {
 	c := install.NewWithDeps(
 		func(name string) (string, error) {

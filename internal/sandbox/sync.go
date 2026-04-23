@@ -8,9 +8,12 @@ import (
 )
 
 // Sync rsyncs changes from the sandbox overlay upperdir back to hostPath.
-// The container is paused during the transfer to ensure consistency, then
-// unpaused if it was running.
 func Sync(podman PodmanRunner, overlayDir, containerName, hostPath string) error {
+	return SyncWith(podman, overlayDir, containerName, hostPath, rsync)
+}
+
+// SyncWith rsyncs using a custom sync function (injectable for tests).
+func SyncWith(podman PodmanRunner, overlayDir, containerName, hostPath string, syncFn func(upper, dst string) error) error {
 	upper := filepath.Join(overlayDir, containerName, "upper")
 	if _, err := os.Stat(upper); os.IsNotExist(err) {
 		return fmt.Errorf("overlay upperdir missing at %s", upper)
@@ -23,7 +26,7 @@ func Sync(podman PodmanRunner, overlayDir, containerName, hostPath string) error
 		}
 	}
 
-	err := rsync(upper, hostPath)
+	err := syncFn(upper, hostPath)
 
 	if wasRunning {
 		_ = podman.Unpause(containerName)

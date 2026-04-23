@@ -60,6 +60,23 @@ func TestMeta_ReadCorrupt(t *testing.T) {
 	}
 }
 
+func TestMeta_WriteMeta_BadDir_ReturnsError(t *testing.T) {
+	// Use a path that cannot be created (a file as a path component).
+	f, err := os.CreateTemp("", "notadir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	m := sandbox.Meta{Name: "sbx-test-abc", HostPath: "/tmp/test"}
+	// f.Name() is a file, so f.Name()+"/sandbox" cannot be a dir.
+	err = sandbox.WriteMeta(f.Name()+"/sandbox", m)
+	if err == nil {
+		t.Error("expected error when stateDir cannot be created")
+	}
+}
+
 func TestMeta_Delete(t *testing.T) {
 	dir := t.TempDir()
 	m := sandbox.Meta{Name: "sbx-test-abc123", HostPath: "/tmp/test"}
