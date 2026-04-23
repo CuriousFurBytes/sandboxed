@@ -1,0 +1,99 @@
+# Base image for sbx sandboxes — runs with krun (VM isolation) by default.
+#
+# Includes: git, lazygit, gitscribe, uv, claude-code, codex, copilot-cli,
+# gh, ripgrep, fd, fzf, jq, node, python 3.
+#
+# Rebuild via:
+#   sbx build     # rebuild the image from this file
+#   sbx rebuild   # rebuild, then authenticate tools and commit the state
+
+FROM fedora:41
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TERM=xterm-256color \
+    PATH=/home/dev/.local/bin:/home/dev/.cargo/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+# ---------------------------------------------------------------------------
+# System packages
+# ---------------------------------------------------------------------------
+RUN dnf -y install --setopt=install_weak_deps=False \
+        git git-lfs openssh-clients gnupg2 ca-certificates \
+        bash bash-completion zsh \
+        curl wget tar xz unzip gzip bzip2 \
+        fzf ripgrep fd-find jq bat \
+        nodejs npm \
+        python3 python3-pip \
+        gh \
+        make gcc gcc-c++ \
+        which procps-ng iproute iputils \
+        shadow-utils sudo \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# ---------------------------------------------------------------------------
+# Non-root user (--userns=keep-id maps your host UID/GID onto this user).
+# Override at build time: podman build --build-arg UID=1001 ...
+# ---------------------------------------------------------------------------
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g "$GID" dev || true \
+ && useradd -m -u "$UID" -g "$GID" -s /bin/bash dev \
+ && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev
+
+USER dev
+WORKDIR /home/dev
+
+# uv — Python package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && mkdir -p /home/dev/.local/bin
+
+# lazygit
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64)  lg_arch=x86_64 ;; \
+        aarch64) lg_arch=arm64  ;; \
+        *) echo "unsupported arch $arch"; exit 1 ;; \
+    esac; \
+    ver=$(curl -fsSL https://api.github.com/repos/jesseduffield/lazygit/releases/latest \
+          | grep -oE '"tag_name":\s*"v[^"]+"' | head -1 | sed 's/.*"v//;s/"$//'); \
+    curl -fsSL "https://github.com/jesseduffield/lazygit/releases/download/v${ver}/lazygit_${ver}_Linux_${lg_arch}.tar.gz" \
+      | tar -xz -C /home/dev/.local/bin lazygit
+
+# gitscribe
+USER root
+RUN dnf -y install golang || dnf -y install go-toolset || true
+USER dev
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64)  gs_arch=x86_64 ;; \
+        aarch64) gs_arch=arm64  ;; \
+        *) gs_arch="$arch" ;; \
+    esac; \
+    mkdir -p /home/dev/.local/bin; \
+    if ! curl -fsSL "https://github.com/freeoss-space/gitscribe/releases/latest/download/gitscribe_Linux_${gs_arch}.tar.gz" \
+         | tar -xz -C /home/dev/.local/bin gitscribe 2>/dev/null; then \
+        GOBIN=/home/dev/.local/bin go install github.com/freeoss-space/gitscribe@latest || \
+        echo "gitscribe install deferred — install manually during 'sbx rebuild'"; \
+    fi
+
+# Claude Code, Codex, GitHub Copilot (npm-distributed)
+RUN npm config set prefix /home/dev/.local \
+ && npm install -g \
+        @anthropic-ai/claude-code \
+        @openai/codex \
+        @github/copilot
+
+# Minimal bashrc for interactive shells
+RUN printf '%s\n' \
+    'export PATH=/home/dev/.local/bin:$PATH' \
+    'export EDITOR=hx' \
+    'alias ll="ls -la"' \
+    'alias lg="lazygit"' \
+    'PS1="\[\e[36m\]sandbox\[\e[0m\]:\w$ "' \
+    >> /home/dev/.bashrc
+
+WORKDIR /workspace
+CMD ["/bin/bash", "-l"]
