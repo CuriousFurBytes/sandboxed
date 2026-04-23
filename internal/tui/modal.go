@@ -14,54 +14,22 @@ var modalHeaderStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#25A065")).
 	Padding(0, 2)
 
-// ModalLauncher runs commands in a tuios floating pane or inline.
-type ModalLauncher struct {
-	lookPath func(string) (string, error)
-}
+// ModalLauncher runs commands inline with a styled header banner.
+type ModalLauncher struct{}
 
-// NewModalLauncher creates a ModalLauncher using the real exec.LookPath.
+// NewModalLauncher creates a ModalLauncher.
 func NewModalLauncher() *ModalLauncher {
-	return &ModalLauncher{lookPath: exec.LookPath}
+	return &ModalLauncher{}
 }
 
-// NewModalLauncherWithDeps creates a ModalLauncher with an injectable path resolver (for tests).
-func NewModalLauncherWithDeps(lookPath func(string) (string, error)) *ModalLauncher {
-	return &ModalLauncher{lookPath: lookPath}
-}
-
-// Launch runs args in a tuios modal when inside a tuios session, otherwise inline.
+// Launch runs args inline with a styled header banner.
 func (l *ModalLauncher) Launch(title string, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no command to run")
 	}
-	if l.isTuiosSession() {
-		return l.launchWithTuios(title, args)
-	}
 	return launchInline(title, args)
 }
 
-// isTuiosSession returns true when running inside an active tuios session
-// and the tuios binary is available.
-func (l *ModalLauncher) isTuiosSession() bool {
-	if os.Getenv("TUIOS_SESSION") == "" && os.Getenv("TUIOS_PANE_ID") == "" {
-		return false
-	}
-	_, err := l.lookPath("tuios")
-	return err == nil
-}
-
-// launchWithTuios spawns a floating pane in the current tuios session.
-func (l *ModalLauncher) launchWithTuios(title string, args []string) error {
-	tuiosArgs := []string{"spawn", "--title", title, "--float", "--"}
-	tuiosArgs = append(tuiosArgs, args...)
-	cmd := exec.Command("tuios", tuiosArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// launchInline runs args in the current terminal with a styled header banner.
 func launchInline(title string, args []string) error {
 	header := modalHeaderStyle.Render(fmt.Sprintf("  %s  ", title))
 	fmt.Fprintln(os.Stderr, header)

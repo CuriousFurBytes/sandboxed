@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/CuriousFurBytes/sandboxed/internal/install"
 )
 
@@ -125,18 +123,11 @@ func TestRequirementFields(t *testing.T) {
 	_ = fmt.Sprintf("%s %s", req.Name, req.Description) // ensure fields readable
 }
 
-func TestDoctorModel_Init_ReturnsNil(t *testing.T) {
-	m := install.NewDoctorModel(install.Result{})
-	if m.Init() != nil {
-		t.Error("Init() should return nil Cmd")
-	}
-}
-
 func TestDoctorModel_View_AllOK(t *testing.T) {
 	m := install.NewDoctorModel(install.Result{})
 	view := m.View()
 	if view == "" {
-		t.Error("View() should return non-empty string when not done")
+		t.Error("View() should return non-empty string")
 	}
 	if !strings.Contains(view, "All dependencies present") {
 		t.Errorf("View() should show all-OK message, got:\n%s", view)
@@ -155,24 +146,5 @@ func TestDoctorModel_View_ShowsMissingAndWarnings(t *testing.T) {
 	}
 	if !strings.Contains(view, "krun") {
 		t.Errorf("View() missing 'krun', got:\n%s", view)
-	}
-}
-
-func TestDoctorModel_Update_KeyMsgQuits(t *testing.T) {
-	m := install.NewDoctorModel(install.Result{})
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if updated.View() != "" {
-		t.Error("View() should return empty string after key press (done=true)")
-	}
-}
-
-func TestDoctorModel_Update_NonKeyMsgNoOp(t *testing.T) {
-	m := install.NewDoctorModel(install.Result{})
-	before := m.View()
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	after := updated.View()
-	// Non-key messages should not change the model to done.
-	if after == "" && before != "" {
-		t.Error("non-key msg should not cause View() to return empty string")
 	}
 }
