@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 
 	"github.com/CuriousFurBytes/sandboxed/internal/assets"
 	"github.com/CuriousFurBytes/sandboxed/internal/config"
@@ -13,8 +14,18 @@ import (
 	"github.com/CuriousFurBytes/sandboxed/internal/tui"
 )
 
-// version is set by the build system via -ldflags.
+// version is set by the build system via -ldflags; falls back to the module
+// version embedded by `go install` at build time.
 var version = "dev"
+
+func init() {
+	if version == "dev" {
+		if info, ok := debug.ReadBuildInfo(); ok &&
+			info.Main.Version != "" && info.Main.Version != "(devel)" {
+			version = info.Main.Version
+		}
+	}
+}
 
 // sandboxSubcmds is the set of subcommands handled by the Manager directly.
 // Anything not in this set is treated as a tool shortcut (sbx <tool> [args]).
