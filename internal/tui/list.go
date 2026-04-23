@@ -3,9 +3,8 @@ package tui
 import (
 	"fmt"
 	"io"
+	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/CuriousFurBytes/sandboxed/internal/sandbox"
@@ -33,31 +32,25 @@ func NewSbxItem(info sandbox.SandboxInfo) SbxItem {
 	return SbxItem{info}
 }
 
-// FilterValue implements list.Item. Includes name and path for fuzzy filtering.
+// FilterValue includes name and path for filtering.
 func (i SbxItem) FilterValue() string { return i.Name + " " + i.HostPath }
 
-// Title implements list.DefaultItem.
+// Title returns the sandbox name.
 func (i SbxItem) Title() string { return i.Name }
 
-// Description implements list.DefaultItem.
+// Description returns the host path.
 func (i SbxItem) Description() string { return i.HostPath }
 
-// SbxDelegate renders each SbxItem in the list.
+// SbxDelegate renders each SbxItem.
 type SbxDelegate struct{}
 
 // NewSbxDelegate creates a SbxDelegate.
 func NewSbxDelegate() SbxDelegate { return SbxDelegate{} }
 
-func (d SbxDelegate) Height() int                             { return 2 }
-func (d SbxDelegate) Spacing() int                            { return 1 }
-func (d SbxDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d SbxDelegate) Height() int  { return 2 }
+func (d SbxDelegate) Spacing() int { return 1 }
 
-func (d SbxDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	item, ok := listItem.(SbxItem)
-	if !ok {
-		return
-	}
-
+func (d SbxDelegate) Render(w io.Writer, index int, selected bool, item SbxItem) {
 	var stateStr string
 	if item.State == "running" {
 		stateStr = stateRunning.Render("● " + item.State)
@@ -68,7 +61,7 @@ func (d SbxDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 	nameStr := item.Name
 	pathStr := item.HostPath
 
-	if index == m.Index() {
+	if selected {
 		nameStr = itemSelected.Render(nameStr)
 		pathStr = itemSelected.Render(pathStr)
 	} else {
@@ -80,59 +73,36 @@ func (d SbxDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 }
 
 type listModel struct {
-	list list.Model
-	done bool
+	infos []sandbox.SandboxInfo
+	done  bool
 }
 
 // NewListModel constructs a listModel for the given sandbox infos.
-// Returns tea.Model so external test code can call View() without knowing the concrete type.
-func NewListModel(infos []sandbox.SandboxInfo) tea.Model {
-	items := make([]list.Item, len(infos))
-	for i, info := range infos {
-		items[i] = SbxItem{info}
-	}
-	l := list.New(items, SbxDelegate{}, 80, 24)
-	l.Title = "sbx — sandboxes"
-	l.Styles.Title = titleStyle
-	l.SetShowStatusBar(true)
-	l.SetFilteringEnabled(true)
-	return listModel{list: l}
+func NewListModel(infos []sandbox.SandboxInfo) *listModel {
+	return &listModel{infos: infos}
 }
 
 // NewDoneListModel returns a listModel already in the quit state (View returns "").
-func NewDoneListModel() tea.Model {
-	return listModel{done: true}
+func NewDoneListModel() *listModel {
+	return &listModel{done: true}
 }
 
-func (m listModel) Init() tea.Cmd { return nil }
-
-func (m listModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.list.SetWidth(msg.Width)
-		m.list.SetHeight(msg.Height - 2)
-		return m, nil
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c", "esc":
-			m.done = true
-			return m, tea.Quit
-		}
-	}
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
-}
-
-func (m listModel) View() string {
+func (m *listModel) View() string {
 	if m.done {
 		return ""
 	}
-	return m.list.View()
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("sbx — sandboxes") + "\n\n")
+	d := SbxDelegate{}
+	for i, info := range m.infos {
+		d.Render(&b, i, false, SbxItem{info})
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
-// RunList displays an interactive filterable list of sandboxes.
+// RunList prints a list of sandboxes to stdout.
 func RunList(infos []sandbox.SandboxInfo) error {
-	_, err := tea.NewProgram(NewListModel(infos), tea.WithAltScreen()).Run()
-	return err
+	fmt.Print(NewListModel(infos).View())
+	return nil
 }

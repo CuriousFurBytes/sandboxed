@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -18,28 +17,14 @@ var (
 
 type doctorModel struct {
 	result Result
-	done   bool
 }
 
-// NewDoctorModel creates a doctorModel for testing without running the full TUI.
-func NewDoctorModel(result Result) tea.Model {
-	return doctorModel{result: result}
-}
-
-func (m doctorModel) Init() tea.Cmd { return nil }
-
-func (m doctorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(tea.KeyMsg); ok {
-		m.done = true
-		return m, tea.Quit
-	}
-	return m, nil
+// NewDoctorModel creates a doctorModel for use in tests or direct rendering.
+func NewDoctorModel(result Result) *doctorModel {
+	return &doctorModel{result: result}
 }
 
 func (m doctorModel) View() string {
-	if m.done {
-		return ""
-	}
 	var b strings.Builder
 	b.WriteString(uiTitle.Render("sbx doctor — dependency check") + "\n\n")
 
@@ -54,14 +39,13 @@ func (m doctorModel) View() string {
 		}
 	}
 
-	b.WriteString("\n" + uiSubtext.Render("Press any key to exit.") + "\n")
 	return b.String()
 }
 
-// RunDoctorUI displays an interactive dependency check using bubbletea.
+// RunDoctorUI prints a colored dependency check report to stdout.
 func RunDoctorUI(result Result) error {
-	_, err := tea.NewProgram(doctorModel{result: result}).Run()
-	return err
+	fmt.Print(NewDoctorModel(result).View())
+	return nil
 }
 
 // PrintDoctorReport prints a plain-text dependency report to stdout.
